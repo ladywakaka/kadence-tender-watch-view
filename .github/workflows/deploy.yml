@@ -1,0 +1,71 @@
+name: Build and publish snapshot
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decrypt snapshot source
+        env:
+          SOURCE_KEY: ${{ secrets.SOURCE_KEY }}
+        run: |
+          if [ -z "$SOURCE_KEY" ]; then echo "SOURCE_KEY secret is not set"; exit 1; fi
+          mkdir -p build
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+            -in src/snapshot.html.enc -out build/index.html -pass env:SOURCE_KEY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Password-protect page
+        env:
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+        run: |
+          # Drop any space or line break pasted around the secret, so the password works as typed
+          DASHBOARD_PASSWORD="$(printf '%s' "$DASHBOARD_PASSWORD" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          if [ -z "$DASHBOARD_PASSWORD" ]; then echo "DASHBOARD_PASSWORD secret is not set. Add it under Settings > Secrets and variables > Actions, then run this workflow again."; exit 1; fi
+          npx --yes staticrypt@3 build/index.html \
+            -p "$DASHBOARD_PASSWORD" \
+            -d dist \
+            --short \
+            --salt "$(echo -n kadence-tender-watch-view | md5sum | cut -c1-32)" \
+            --remember 30 \
+            --template-title "KADENCE Tender Watch" \
+            --template-instructions "請輸入密碼 · Enter the password to view the KADENCE tender list." \
+            --template-button "開啟 · Open" \
+            --template-color-primary "#0b6b70" \
+            --template-color-secondary "#f3f6f7"
+          printf 'User-agent: *\nDisallow: /\n' > dist/robots.txt
+          rm -rf build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
