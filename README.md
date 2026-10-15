@@ -5,6 +5,6 @@ The page source is stored only encrypted (`src/snapshot.html.enc`); the workflow
 
 Data is a snapshot of the Claude dashboard's database. Go/no-go changes on this page are saved only in each viewer's browser.
 
-To update: export the `tenders` and `runs` collections from the Claude artifact to `<db_dir>`, then
+To update: export the `tenders`, `runs` and `registrations` collections from the Claude artifact to `<db_dir>`, then
 `python3 scripts/build_view.py ../kadence-tender-watch/dashboard/kadence-tender-watch.html <db_dir> /tmp/view.html`,
 `scripts/encrypt.sh /tmp/view.html`, commit and push.
